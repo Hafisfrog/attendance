@@ -1,0 +1,33 @@
+{
+  "name": "prayer-attendance-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Backend API ระบบลงเวลาละหมาดด้วยบัตรนักเรียน (RFID)",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "db:generate": "prisma generate",
+    "db:validate": "prisma validate",
+    "seed": "node prisma/seed.js",
+    "simulate": "node scripts/simulate-tap.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.0.0",
+    "adhan": "^4.4.3",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^5.1.0",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "prisma": "^6.0.0"
+  }
+}

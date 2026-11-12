@@ -1,0 +1,22 @@
+# PostgreSQL สำหรับพัฒนา (รหัสผ่านด้านล่างใช้เฉพาะเครื่องตัวเอง ห้ามใช้บนเซิร์ฟเวอร์จริง)
+# ไฟล์ database/schema.sql จะถูกรันอัตโนมัติ "เฉพาะครั้งแรก" ที่สร้าง volume ใหม่
+services:
+  db:
+    image: postgres:16
+    container_name: prayer_attendance_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: prayer
+      POSTGRES_PASSWORD: prayer_dev_pass
+      POSTGRES_DB: prayer_attendance
+      # ปล่อยฐานข้อมูลเป็น UTC (ค่าเริ่มต้น) แอปแปลงเป็นเวลาไทยเอง
+      # ห้ามตั้ง TZ เป็น Asia/Bangkok ที่ฝั่งฐานข้อมูล เพราะอาจทำให้เวลาที่บันทึกเคลื่อน 7 ชั่วโมง
+      TZ: UTC
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+
+volumes:
+  pgdata:
