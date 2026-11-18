@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
+import { normalizeUid } from '../services/tapService.js';
 import { HttpError } from '../utils/errors.js';
 import { idParam, parse, positiveInt } from '../utils/validate.js';
 
@@ -14,6 +15,7 @@ const studentSchema = z.object({
   lastName: z.string().trim().min(1).max(100),
   gender: z.enum(['M', 'F']).nullable().optional(),
   classroomId: z.number().int().positive().nullable().optional(),
+  cardUid: z.string().trim().max(64).optional(),
 });
 const updateSchema = studentSchema.partial().extend({ isActive: z.boolean().optional() });
 const bulkSchema = z.object({ students: z.array(studentSchema).min(1).max(2000) });
@@ -81,15 +83,42 @@ router.get('/:id', async (req, res) => {
   res.json(student);
 });
 
+async function assignCard(tx, cardUid, studentId) {
+  const uid = normalizeUid(cardUid);
+  if (!uid || uid.length > 32) throw new HttpError(400, 'รหัสบัตรไม่ถูกต้อง');
+
+  const existing = await tx.card.findUnique({ where: { uid } });
+  if (existing?.studentId && existing.studentId !== studentId) {
+    throw new HttpError(409, 'บัตรนี้ผูกกับนักเรียนคนอื่นแล้ว');
+  }
+  if (existing) {
+    await tx.card.update({ where: { uid }, data: { studentId, status: 'active' } });
+  } else {
+    await tx.card.create({ data: { uid, studentId, status: 'active' } });
+  }
+}
+
 router.post('/', async (req, res) => {
   const data = parse(studentSchema, req.body);
-  res.status(201).json(await prisma.student.create({ data, include }));
+  const { cardUid, ...studentData } = data;
+  const student = await prisma.$transaction(async (tx) => {
+    const created = await tx.student.create({ data: studentData });
+    if (cardUid) await assignCard(tx, cardUid, created.id);
+    return tx.student.findUnique({ where: { id: created.id }, include });
+  });
+  res.status(201).json(student);
 });
 
 router.put('/:id', async (req, res) => {
   const id = idParam(req.params.id);
   const data = parse(updateSchema, req.body);
-  res.json(await prisma.student.update({ where: { id }, data, include }));
+  const { cardUid, ...studentData } = data;
+  const student = await prisma.$transaction(async (tx) => {
+    await tx.student.update({ where: { id }, data: studentData });
+    if (cardUid) await assignCard(tx, cardUid, id);
+    return tx.student.findUnique({ where: { id }, include });
+  });
+  res.json(student);
 });
 
 // ไม่ลบจริง (เพื่อเก็บประวัติ) แต่ปิดการใช้งาน; ต้องการเปิดใหม่ใช้ PUT { "isActive": true }

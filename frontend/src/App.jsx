@@ -4,7 +4,6 @@ import Layout from './components/Layout.jsx';
 import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Students from './pages/Students.jsx';
-import CardRegistration from './pages/CardRegistration.jsx';
 import Reports from './pages/Reports.jsx';
 import PrayerWindows from './pages/PrayerWindows.jsx';
 import Classrooms from './pages/Classrooms.jsx';
@@ -20,7 +19,6 @@ export default function App() {
       <Route element={<Layout />}>
         <Route index element={<Dashboard />} />
         <Route path="students" element={<Students />} />
-        <Route path="cards" element={<CardRegistration />} />
         <Route path="reports" element={<Reports />} />
         <Route path="windows" element={<PrayerWindows />} />
         <Route path="classrooms" element={<Classrooms />} />

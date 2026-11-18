@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api.js';
-import { useDebounced } from '../hooks.js';
+import { useDebounced, useTapStream } from '../hooks.js';
 import {
   Alert,
   Badge,
@@ -139,10 +139,16 @@ function StudentForm({ student, rooms, onClose, onSaved }) {
     lastName: student?.lastName ?? '',
     gender: student?.gender ?? '',           
     classroomId: student?.classroomId ?? '',
+    cardUid: student?.cards?.find((card) => card.status === 'active')?.uid ?? '',
   });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+  const readerConnected = useTapStream(useCallback((tap) => {
+    if (tap.result === 'unknown_card' && tap.cardUid) {
+      setForm((current) => ({ ...current, cardUid: tap.cardUid }));
+    }
+  }, []));
 
   async function save() {
     setBusy(true);
@@ -153,6 +159,7 @@ function StudentForm({ student, rooms, onClose, onSaved }) {
       lastName: form.lastName.trim(),
       gender: form.gender || null,
       classroomId: form.classroomId ? Number(form.classroomId) : null,
+      cardUid: form.cardUid.trim(),
     };
     try {
       if (student) await api.put(`/api/students/${student.id}`, body);
@@ -201,6 +208,18 @@ function StudentForm({ student, rooms, onClose, onSaved }) {
           onChange={(v) => setForm({ ...form, classroomId: v })}
           allLabel="ไม่ระบุ"
         />
+      </Field>
+      <Field label="RFID Card">
+        <input
+          value={form.cardUid}
+          onChange={set('cardUid')}
+          placeholder="แตะบัตรที่เครื่องอ่าน หรือกรอกรหัสบัตร"
+          autoComplete="off"
+        />
+        <p className="hint">
+          <span className={`dot ${readerConnected ? 'on' : ''}`} />{' '}
+          {readerConnected ? 'พร้อมรับบัตร แตะบัตรเพื่อแสดงรหัส' : 'กำลังเชื่อมต่อเครื่องอ่านบัตร...'}
+        </p>
       </Field>
     </Modal>
   );

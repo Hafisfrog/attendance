@@ -35,6 +35,33 @@ async function seedAdmin() {
   }
 }
 
+async function seedTeacher() {
+  const username = process.env.TEACHER_USERNAME || 'teacher';
+  const existing = await prisma.user.findUnique({ where: { username } });
+  if (existing) {
+    console.log(`บัญชี "${username}" มีอยู่แล้ว ข้ามขั้นตอนนี้`);
+    return;
+  }
+
+  let password = process.env.TEACHER_PASSWORD;
+  const generated = !password;
+  if (generated) password = randomBytes(9).toString('base64url');
+  if (password.length < 8) throw new Error('TEACHER_PASSWORD ต้องยาวอย่างน้อย 8 ตัวอักษร');
+
+  await prisma.user.create({
+    data: {
+      username,
+      passwordHash: await bcrypt.hash(password, 10),
+      displayName: process.env.TEACHER_DISPLAY_NAME || 'ครูผู้สอน',
+      role: 'teacher',
+    },
+  });
+  console.log(`สร้างบัญชีครู: ${username}`);
+  if (generated) {
+    console.log(`รหัสผ่าน (แสดงครั้งเดียว กรุณาเก็บไว้และเปลี่ยนหลังเข้าสู่ระบบ): ${password}`);
+  }
+}
+
 async function seedDemo() {
   const academicYear = new Date().getFullYear() + 543;
   const classroom = await prisma.classroom.upsert({
@@ -74,6 +101,7 @@ async function seedDemo() {
 
 try {
   await seedAdmin();
+  await seedTeacher();
   if (['1', 'true', 'yes'].includes(String(process.env.SEED_DEMO).toLowerCase())) {
     await seedDemo();
   }

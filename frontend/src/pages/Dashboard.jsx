@@ -170,7 +170,7 @@ export default function Dashboard() {
 
   return (
     <>
-      <PageHead title="ภาพรวมการละหมาด" subtitle={fmtDate(date)}>
+      <PageHead title="Dashboard(ภาพรวม)" subtitle={fmtDate(date)}>
         <ClassroomSelect rooms={rooms} value={classroomId} onChange={setClassroomId} />
         <button onClick={() => setDate(addDays(date, -1))} aria-label="วันก่อนหน้า">
           ←
@@ -264,7 +264,7 @@ export default function Dashboard() {
       )}
 
       <div className="two-col">
-        <section className="card">
+        {/* <section className="card">
           <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
             <h2>
               ยังไม่แตะบัตร
@@ -310,7 +310,7 @@ export default function Dashboard() {
               </table>
             </div>
           )}
-        </section>
+        </section> */}
 
         <section className="card">
           <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>

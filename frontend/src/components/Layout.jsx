@@ -17,7 +17,7 @@ export default function Layout() {
           onError={(event) => event.currentTarget.remove()}
         />
         <div className="brand">
-          ลงเวลาละหมาด
+          โรงเรียนพัฒนาอิสลาม
           <small>ระบบแตะบัตรนักเรียน</small>
         </div>
         <nav className="nav">
@@ -25,7 +25,6 @@ export default function Layout() {
             ภาพรวมวันนี้
           </NavLink>
           <NavLink to="/students">นักเรียน</NavLink>
-          <NavLink to="/cards">ลงทะเบียนบัตร</NavLink>
           <NavLink to="/reports">รายงาน</NavLink>
           <NavLink to="/windows">ตารางเวลาละหมาด</NavLink>
           <NavLink to="/classrooms">ห้องเรียน</NavLink>
