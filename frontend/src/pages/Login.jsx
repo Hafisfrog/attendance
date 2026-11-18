@@ -24,6 +24,7 @@ export default function Login() {
   return (
     <div className="login-wrap">
       <form className="card login-card" onSubmit={submit}>
+        <img className="login-logo" src="/logo.png" alt="โลโก้โรงเรียน" />
         <h1>ลงเวลาอ้ายแหน่</h1>
         <p>เข้าสู่ระบบสำหรับครูและผู้ดูแล</p>
         <Alert>{error}</Alert>

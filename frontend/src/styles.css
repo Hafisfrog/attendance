@@ -516,6 +516,13 @@ tr:last-child td {
 .login-card {
   width: min(400px, 100%);
 }
+.login-logo {
+  display: block;
+  width: 77px;
+  height: 77px;
+  object-fit: contain;
+  margin: 4px auto 18px;
+}
 .login-card h1 {
   margin-bottom: 4px;
 }
