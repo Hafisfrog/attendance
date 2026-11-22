@@ -26,20 +26,100 @@ export default function Dashboard() {
   const [error, setError] = useState('');
   const [cameraError, setCameraError] = useState('');
   const [cameraOn, setCameraOn] = useState(false);
-  const [photo, setPhoto] = useState(null);
   const [readerDevices, setReaderDevices] = useState([]);
   const [readerDeviceId, setReaderDeviceId] = useState('');
   const [scanUid, setScanUid] = useState('');
   const [scanBusy, setScanBusy] = useState(false);
   const [readerMessage, setReaderMessage] = useState('');
   const scanInputRef = useRef(null);
+  const scanBufferRef = useRef('');
+  const scanTimerRef = useRef(null);
+  const scanHandlerRef = useRef(null);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const { rooms } = useClassrooms();
 
+  async function sendReaderScan(cardUid) {
+    if (!cardUid || !readerDeviceId || scanBusy) return;
+    setScanBusy(true);
+    setReaderMessage('กำลังอ่านบัตร...');
+    try {
+      const result = await api.post('/api/attendance/reader-scan', { cardUid, deviceId: Number(readerDeviceId) });
+      setReaderMessage(result.message || 'รับข้อมูลบัตรแล้ว');
+      const device = readerDevices.find((item) => String(item.id) === String(readerDeviceId));
+      setFeed((items) => [
+        { ...result, deviceName: device?.name ?? '', hasPhoto: false },
+        ...items.filter((item) => item.tapLogId !== result.tapLogId),
+      ].slice(0, 1));
+    } catch (e) {
+      setReaderMessage(e.message);
+    } finally {
+      setScanBusy(false);
+      scanInputRef.current?.focus();
+    }
+  }
+  scanHandlerRef.current = sendReaderScan;
+
+  useEffect(() => {
+    function finishScan() {
+      window.clearTimeout(scanTimerRef.current);
+      const cardUid = scanBufferRef.current;
+      scanBufferRef.current = '';
+      if (cardUid.length >= 4) scanHandlerRef.current?.(cardUid);
+    }
+    function onKeyDown(event) {
+      if (event.ctrlKey || event.altKey || event.metaKey) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (
+        target.isContentEditable || ['INPUT', 'TEXTAREA'].includes(target.tagName)
+      )) return;
+      if (event.key === 'Enter') {
+        if (scanBufferRef.current.length >= 4) {
+          event.preventDefault();
+          finishScan();
+        }
+        return;
+      }
+      if (event.key.length !== 1 || !/^[0-9A-Za-z]$/.test(event.key)) return;
+      event.preventDefault();
+      scanBufferRef.current += event.key;
+      window.clearTimeout(scanTimerRef.current);
+      scanTimerRef.current = window.setTimeout(finishScan, 800);
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.clearTimeout(scanTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    api.get('/api/attendance/recent-taps').then((items) => {
+      if (!active) return;
+      setFeed((current) => {
+        const byId = new Map(items.map((item) => [item.tapLogId, item]));
+        current.forEach((item) => byId.set(item.tapLogId, item));
+        return [...byId.values()]
+          .sort((a, b) => new Date(b.tappedAt) - new Date(a.tappedAt))
+          .slice(0, 1);
+      });
+      if (items[0]?.hasPhoto) {
+        api.get(`/api/attendance/tap/${items[0].tapLogId}/photo`).then(({ image }) => {
+          if (active) setFeed((current) => current.map((item) => (
+            item.tapLogId === items[0].tapLogId ? { ...item, photo: image } : item
+          )));
+        }).catch(() => {});
+      }
+    }).catch((e) => setError(e.message));
+    return () => { active = false; };
+  }, []);
+
   useEffect(() => {
     if (scanBusy || scanUid.trim().length < 4) return undefined;
-    const timer = window.setTimeout(() => scanInputRef.current?.form?.requestSubmit(), 250);
+    // เครื่องอ่านบางรุ่นส่ง UID เป็นหลายชุด; รอให้การพิมพ์หยุดก่อนส่ง
+    // และยังรองรับ Enter จากเครื่องอ่านให้ส่งได้ทันทีผ่าน onKeyDown ด้านล่าง
+    const timer = window.setTimeout(() => scanInputRef.current?.form?.requestSubmit(), 800);
     return () => window.clearTimeout(timer);
   }, [scanUid, scanBusy]);
 
@@ -54,19 +134,7 @@ export default function Dashboard() {
     event.preventDefault();
     const cardUid = scanUid.trim();
     setScanUid('');
-    scanInputRef.current?.focus();
-    if (!cardUid || !readerDeviceId || scanBusy) return;
-    setScanBusy(true);
-    setReaderMessage('กำลังอ่านบัตร...');
-    try {
-      const result = await api.post('/api/attendance/reader-scan', { cardUid, deviceId: Number(readerDeviceId) });
-      setReaderMessage(result.message || 'รับข้อมูลบัตรแล้ว');
-    } catch (e) {
-      setReaderMessage(e.message);
-    } finally {
-      setScanBusy(false);
-      scanInputRef.current?.focus();
-    }
+    sendReaderScan(cardUid);
   }
 
   useEffect(() => {
@@ -100,8 +168,9 @@ export default function Dashboard() {
     canvas.height = Math.round(640 * video.videoHeight / video.videoWidth);
     canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
     try {
-      await api.post(`/api/attendance/tap/${tap.tapLogId}/photo`, { image: canvas.toDataURL('image/jpeg', 0.65) });
-      setFeed((items) => items.map((item) => item.tapLogId === tap.tapLogId ? { ...item, hasPhoto: true } : item));
+      const image = canvas.toDataURL('image/jpeg', 0.65);
+      await api.post(`/api/attendance/tap/${tap.tapLogId}/photo`, { image });
+      setFeed((items) => items.map((item) => item.tapLogId === tap.tapLogId ? { ...item, hasPhoto: true, photo: image } : item));
     } catch (e) {
       setCameraError(`บันทึกภาพไม่สำเร็จ: ${e.message}`);
     }
@@ -147,7 +216,7 @@ export default function Dashboard() {
   const live = useTapStream(
     useCallback(
       (tap) => {
-        setFeed((f) => [{ ...tap, at: Date.now() }, ...f].slice(0, 20));
+        setFeed((f) => [tap, ...f.filter((item) => item.tapLogId !== tap.tapLogId)].slice(0, 1));
         if (tap.result === 'recorded') captureForTap(tap);
         loadDashboard();
         loadMissing();
@@ -198,13 +267,13 @@ export default function Dashboard() {
         {cameraError && <p className="hint" role="alert">{cameraError}</p>}
         <hr style={{ margin: '16px 0' }} />
         <strong>เครื่องอ่านบัตร USB</strong>
-        <div className="hint">เลือกจุดอ่านบัตร แล้วคลิกช่องนี้ก่อนแตะบัตร ระบบจะบันทึกให้อัตโนมัติเมื่ออ่านรหัสเสร็จ</div>
+        <div className="hint">เลือกจุดอ่านบัตร แล้วแตะบัตรได้เลย ไม่ต้องคลิกช่องรับรหัส ระบบจะบันทึกให้อัตโนมัติ</div>
         <form onSubmit={submitReaderScan} className="row" style={{ marginTop: 10 }}>
           <select aria-label="จุดอ่านบัตร" value={readerDeviceId} onChange={(e) => setReaderDeviceId(e.target.value)} disabled={!readerDevices.length}>
             {!readerDevices.length && <option value="">ยังไม่มีจุดอ่านบัตร</option>}
             {readerDevices.map((device) => <option key={device.id} value={device.id}>{device.name}{device.location ? ` — ${device.location}` : ''}</option>)}
           </select>
-          <input ref={scanInputRef} autoFocus value={scanUid} onChange={(e) => setScanUid(e.target.value)} placeholder="คลิกที่นี่ แล้วแตะบัตร..." aria-label="รับรหัสจากเครื่องอ่านบัตร" disabled={!readerDeviceId || scanBusy} />
+          <input ref={scanInputRef} autoFocus value={scanUid} onChange={(e) => setScanUid(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }} placeholder="คลิกที่นี่ แล้วแตะบัตร..." aria-label="รับรหัสจากเครื่องอ่านบัตร" disabled={!readerDeviceId || scanBusy} />
         </form>
         {readerMessage && <p className="hint" role="status">{readerMessage}</p>}
       </section>
@@ -323,17 +392,14 @@ export default function Dashboard() {
           {feed.length === 0 && <div className="empty">รอการแตะบัตร...</div>}
           <ul className="feed">
             {feed.map((t) => (
-              <li key={`${t.tapLogId}-${t.at}`}>
+              <li key={t.tapLogId}>
                 <time>{fmtTime(t.tappedAt)}</time>
                 <div className="grow">
                   <strong>{t.student ? t.student.name : 'ไม่รู้จักบัตร'}</strong>
                   {t.student?.classroom && <span className="hint"> · {t.student.classroom}</span>}
                   {t.cardUid && <div className="hint">รหัสบัตร {t.cardUid}</div>}
                   <div className="hint">{t.deviceName}</div>
-                  {t.hasPhoto && <button className="small" onClick={async () => {
-                    try { setPhoto((await api.get(`/api/attendance/tap/${t.tapLogId}/photo`)).image); }
-                    catch (e) { setCameraError(e.message); }
-                  }}>ดูภาพ</button>}
+                  {t.photo && <img src={t.photo} alt={`ภาพของ ${t.student?.name ?? 'ผู้แตะบัตรล่าสุด'}`} style={{ display: 'block', width: 240, maxWidth: '100%', marginTop: 8, borderRadius: 8 }} />}
                 </div>
                 <Badge tone={t.status === 'late' ? 'warn' : RESULT_TONE[t.result]}>{t.message}</Badge>
               </li>
@@ -341,10 +407,6 @@ export default function Dashboard() {
           </ul>
         </section>
       </div>
-      {photo && <div className="overlay" onClick={() => setPhoto(null)}><div className="modal" style={{ width: 'min(720px, 100%)' }} onClick={(e) => e.stopPropagation()}>
-        <button className="small" style={{ float: 'right' }} onClick={() => setPhoto(null)}>ปิด</button>
-        <h2>ภาพจากจุดสแกน</h2><img src={photo} alt="ภาพผู้สแกน" style={{ display: 'block', maxWidth: 'min(80vw, 640px)', maxHeight: '70vh', borderRadius: 8 }} />
-      </div></div>}
     </>
   );
 }

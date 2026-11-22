@@ -8,6 +8,7 @@ import {
   ALL_PRAYER_KEYS,
   ATTENDANCE_STATUSES,
   PRAYER_NAMES_TH,
+  RESULT_MESSAGES_TH,
   STATUS_NAMES_TH,
 } from '../utils/constants.js';
 import { HttpError } from '../utils/errors.js';
@@ -29,6 +30,43 @@ router.get('/reader-devices', async (req, res) => {
     where: { isActive: true },
     select: { id: true, name: true, location: true },
     orderBy: { id: 'asc' },
+  }));
+});
+
+router.get('/recent-taps', async (req, res) => {
+  const taps = await prisma.tapLog.findMany({
+    take: 1,
+    orderBy: [{ tappedAt: 'desc' }, { id: 'desc' }],
+    include: {
+      student: { select: { firstName: true, lastName: true, classroom: { select: { name: true } } } },
+      device: { select: { name: true } },
+      attendance: { select: { status: true } },
+    },
+  });
+  const photoRows = await prisma.attendance.findMany({
+    where: { tapLogId: { in: taps.map((tap) => tap.id) }, facePhoto: { not: null } },
+    select: { tapLogId: true },
+  });
+  const photoTapIds = new Set(photoRows.map((row) => String(row.tapLogId)));
+
+  res.json(taps.map((tap) => {
+    const attendance = tap.attendance[0];
+    return {
+      tapLogId: String(tap.id),
+      tappedAt: tap.tappedAt.toISOString(),
+      result: tap.result,
+      status: attendance?.status ?? null,
+      message: tap.result === 'recorded' && attendance?.status === 'late'
+        ? RESULT_MESSAGES_TH.late
+        : RESULT_MESSAGES_TH[tap.result] ?? tap.result,
+      student: tap.student ? {
+        name: `${tap.student.firstName} ${tap.student.lastName}`,
+        classroom: tap.student.classroom?.name ?? null,
+      } : null,
+      cardUid: tap.result === 'unknown_card' ? tap.cardUid : undefined,
+      deviceName: tap.device.name,
+      hasPhoto: photoTapIds.has(String(tap.id)),
+    };
   }));
 });
 
